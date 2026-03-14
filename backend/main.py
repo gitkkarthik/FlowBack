@@ -5,10 +5,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 
-import database
-import capture
-import gemini
-from models import (
+from flowback import database
+from flowback import capture
+from flowback import gemini
+from flowback.models import (
     BriefingResponse,
     SnapshotListItem,
     SnapshotRequest,
