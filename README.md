@@ -151,6 +151,32 @@ FlowBack/
 
 The Graph tab shows a force-directed map of every error you've tracked, which projects they appeared in, and which skill areas they touch.
 
+**Sample graph**
+
+```mermaid
+graph TD
+    classDef error fill:#ef4444,color:#fff,stroke:#dc2626
+    classDef project fill:#3b82f6,color:#fff,stroke:#2563eb
+    classDef tag fill:#a855f7,color:#fff,stroke:#9333ea
+
+    E1("TypeError ×4"):::error --- P1("fashio-ai"):::project
+    E1 --- P2("flowBack"):::project
+    E1 --- T1("#null-check"):::tag
+
+    E2("401 Unauthorized ×3"):::error --- P1
+    E2 --- T2("#auth-token"):::tag
+
+    E3("CORS Error ×2"):::error --- P2
+    E3 --- T2
+    E3 --- T3("#api-integration"):::tag
+
+    E4("ModuleNotFoundError ×1"):::error --- P2
+    E4 --- T4("#dependency"):::tag
+```
+
+> `TypeError` is connected to **both projects** → cross-cutting knowledge gap, not project-specific.
+> `#auth-token` is shared by two errors → auth is a skill area to strengthen.
+
 **Node types**
 
 | Color | Type | What it represents |
