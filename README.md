@@ -147,6 +147,43 @@ FlowBack/
 
 ---
 
+## Reading the Error Graph
+
+The Graph tab shows a force-directed map of every error you've tracked, which projects they appeared in, and which skill areas they touch.
+
+**Node types**
+
+| Color | Type | What it represents |
+|---|---|---|
+| 🔴 Red | Error | A unique error type (e.g. `TypeError`, `401 Unauthorized`). Size = how many times you've hit it. |
+| 🔵 Blue | Project | A project folder where errors occurred (e.g. `fashio-ai`, `flowBack`). |
+| 🟣 Purple | Skill tag | A skill area extracted from the error (e.g. `#auth-token`, `#null-check`, `#file-upload`). Size = how often this skill area is involved. |
+
+**How to read it**
+
+- A **large red node** = an error you keep hitting — highest priority to fix properly.
+- A **large purple node** with many red nodes pointing to it = a skill gap. That tag represents an area worth studying.
+- A **red node connected to multiple blue project nodes** = a cross-cutting problem that isn't specific to one project — a fundamental knowledge gap.
+- **Isolated red nodes** = one-off issues, less concerning.
+- **Hover over any node** to see details: error type, root cause, and occurrence count.
+
+**How to populate it**
+
+The graph is empty until you track errors. Run `flowback error` from inside your project directories — the project is auto-detected from your current folder:
+
+```bash
+cd ~/projects/myapp
+flowback error "TypeError: Cannot read properties of undefined"
+
+# Or pipe output directly
+npm run build 2>&1 | flowback error
+python manage.py migrate 2>&1 | flowback error
+```
+
+Over time the graph builds up a picture of your recurring weak spots across all your projects.
+
+---
+
 ## Notes
 
 - All data stays local — nothing leaves your machine except file snippets sent to Gemini.
