@@ -1,36 +1,77 @@
 # FlowBack
 
-Pick up exactly where you left off. FlowBack watches your recently modified files, sends them to Gemini, and hands you a focused briefing when you sit back down — per project, with recurring issue tracking via tags.
+Pick up exactly where you left off. FlowBack scans your recently modified files, sends them to Gemini AI, and gives you a focused briefing when you sit back down — per project, with error tracking and skill gap visualization.
 
-## How it works
+---
 
-**Pause** — point it at your project folders before stepping away, click *Save my context*.
+## What it does
 
-**Resume** — come back to a per-project AI briefing: your goal, where you were stuck, next 3 steps, files changed, and auto-generated tags. Click any tag to see every past session where you hit the same issue.
+| Feature | Description |
+|---|---|
+| **Pause & Resume** | Save your coding context before a break, get a per-project AI briefing when you return |
+| **Error tracking** | Paste an error, get root cause + fix steps, see how many times you've hit the same issue |
+| **Force graph** | Visual map of errors across projects and skill areas — identify patterns and knowledge gaps |
+| **Tags** | Auto-generated skill labels (e.g. `#auth-token`, `#file-upload`) that track across sessions |
 
-## Stack
+---
 
-- **Backend** — Python, FastAPI, SQLite, Google Gemini 2.5 Flash
-- **Frontend** — React 18, Vite, Tailwind CSS
+## Two ways to use it
+
+### Option 1 — Terminal (CLI)
+
+```bash
+# Save context before stepping away
+flowback pause ~/projects/myapp ~/projects/other
+
+# Resume when you're back
+flowback resume
+
+# Track an error
+flowback error "TypeError: Cannot read properties of undefined"
+
+# Or pipe directly from a command
+npm run build 2>&1 | flowback error
+
+# See all tracked errors with counts
+flowback errors
+
+# See recurring tags / skill gaps
+flowback tags
+```
+
+### Option 2 — Web UI (localhost)
+
+Open `http://localhost:5173` in your browser:
+
+- **Pause tab** — add project folders, click *Save my context*
+- **Resume tab** — per-project AI briefings with goal, stuck point, next steps, and clickable tags
+- **Graph tab** — force-directed graph of errors, projects, and skill tags
+
+---
 
 ## Setup
 
-### Prerequisites
+### 1. Clone the repo
 
-- Python 3.12+
-- Node 18+
-- A [Google Gemini API key](https://aistudio.google.com/app/apikey)
+```bash
+git clone https://github.com/gitkkarthik/FlowBack.git
+cd FlowBack
+```
 
-### Backend
+### 2. Get a Gemini API key
+
+Get a free key at [aistudio.google.com](https://aistudio.google.com/app/apikey).
+
+### 3. Set up the backend
 
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Create a `.env` file in `backend/`:
+Create `backend/.env`:
 
 ```
 GEMINI_API_KEY=your_key_here
@@ -44,7 +85,7 @@ uvicorn main:app --reload
 
 API runs at `http://localhost:8000`.
 
-### Frontend
+### 4. Set up the frontend
 
 ```bash
 cd frontend
@@ -52,31 +93,63 @@ npm install
 npm run dev
 ```
 
-App runs at `http://localhost:5173`.
+UI runs at `http://localhost:5173`.
+
+### 5. (Optional) Install the CLI
+
+To use `flowback` from any terminal, install the package from the repo root:
+
+```bash
+pip install -e .
+```
+
+Create `~/.flowback/.env` with your API key:
+
+```
+GEMINI_API_KEY=your_key_here
+```
+
+Then use it from anywhere:
+
+```bash
+flowback pause ~/projects/myapp
+flowback resume
+flowback error "your error here"
+```
+
+---
 
 ## Project structure
 
 ```
-flowBack/
+FlowBack/
+├── flowback/                   # Core Python package (shared by CLI + backend)
+│   ├── capture.py              # File scanner
+│   ├── database.py             # SQLite helpers (~/.flowback/history.db)
+│   ├── gemini.py               # Gemini AI integration
+│   ├── models.py               # Pydantic models
+│   └── cli.py                  # CLI entry point (flowback command)
 ├── backend/
-│   ├── main.py          # FastAPI routes
-│   ├── capture.py       # File scanner
-│   ├── gemini.py        # AI briefing generation
-│   ├── database.py      # SQLite helpers
-│   ├── models.py        # Pydantic models
+│   ├── main.py                 # FastAPI server
 │   └── requirements.txt
-└── frontend/
-    └── src/
-        ├── App.jsx
-        └── components/
-            ├── PauseScreen.jsx
-            ├── ResumeScreen.jsx
-            ├── BriefingCard.jsx
-            └── TagPanel.jsx
+├── frontend/
+│   └── src/
+│       ├── App.jsx
+│       └── components/
+│           ├── PauseScreen.jsx
+│           ├── ResumeScreen.jsx
+│           ├── BriefingCard.jsx
+│           ├── TagPanel.jsx
+│           └── ErrorGraph.jsx  # Force graph visualization
+├── pyproject.toml              # CLI package config
+└── setup.py
 ```
+
+---
 
 ## Notes
 
-- All data stays local — nothing leaves your machine except the file snippets sent to Gemini for analysis.
+- All data stays local — nothing leaves your machine except file snippets sent to Gemini.
 - Scans up to 5 recently modified files per folder (last 2 hours), skipping binaries, `node_modules`, `.git`, build output, and other noise.
-- The folder picker (Choose button) requires macOS — it uses `osascript` under the hood. On other platforms, type the path manually.
+- The **Choose folder** button in the UI requires macOS (uses `osascript`). On other platforms, type the path manually.
+- Data is stored at `~/.flowback/history.db` — shared between the CLI and the web UI.
