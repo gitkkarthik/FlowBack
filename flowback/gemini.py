@@ -1,15 +1,18 @@
 import json
 import os
 import re
+from pathlib import Path
 from typing import Optional
 
-import google.generativeai as genai
 from dotenv import load_dotenv
+from google import genai
 
+# Load .env from ~/.flowback/ first, then fallback to cwd
+load_dotenv(Path.home() / ".flowback" / ".env")
 load_dotenv()
 
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-_model = genai.GenerativeModel("gemini-2.5-flash")
+_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+_MODEL = "gemini-2.5-flash"
 
 SYSTEM_PROMPT = """You are a developer productivity assistant.
 Given a snapshot of recently modified files and an optional developer note,
@@ -35,37 +38,6 @@ Tags should be specific enough to be meaningful if they recur across sessions.
 Be specific and technical. Base your analysis on the actual file contents.
 Do not include markdown code fences or any text outside the JSON object."""
 
-
-def _build_prompt(
-    user_note: Optional[str],
-    file_contents: dict[str, str],
-    files_changed: list[str],
-) -> str:
-    parts = [SYSTEM_PROMPT, "\n\n---\n"]
-
-    if user_note:
-        parts.append(f"## Developer Note\n{user_note}\n\n")
-
-    if files_changed:
-        parts.append(f"## Files Changed\n" + "\n".join(f"- {f}" for f in files_changed) + "\n\n")
-
-    if file_contents:
-        parts.append("## File Contents\n")
-        for path, content in file_contents.items():
-            parts.append(f"\n### {path}\n```\n{content}\n```\n")
-
-    parts.append("\n---\nReturn the JSON briefing now:")
-    return "".join(parts)
-
-
-def _parse_response(text: str) -> dict:
-    # Strip markdown fences if present
-    text = text.strip()
-    text = re.sub(r"^```(?:json)?\s*", "", text)
-    text = re.sub(r"\s*```$", "", text)
-    return json.loads(text.strip())
-
-
 ERROR_PROMPT = """You are a developer productivity assistant specializing in error analysis.
 Given an error message, return a JSON analysis.
 
@@ -88,11 +60,63 @@ Two occurrences of the same logical error must produce the same fingerprint.
 Do not include markdown code fences or any text outside the JSON object."""
 
 
+def _build_prompt(
+    user_note: Optional[str],
+    file_contents: dict[str, str],
+    files_changed: list[str],
+) -> str:
+    parts = [SYSTEM_PROMPT, "\n\n---\n"]
+
+    if user_note:
+        parts.append(f"## Developer Note\n{user_note}\n\n")
+
+    if files_changed:
+        parts.append("## Files Changed\n" + "\n".join(f"- {f}" for f in files_changed) + "\n\n")
+
+    if file_contents:
+        parts.append("## File Contents\n")
+        for path, content in file_contents.items():
+            parts.append(f"\n### {path}\n```\n{content}\n```\n")
+
+    parts.append("\n---\nReturn the JSON briefing now:")
+    return "".join(parts)
+
+
+def _parse_response(text: str) -> dict:
+    text = text.strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+    return json.loads(text.strip())
+
+
+def generate_briefing(
+    user_note: Optional[str],
+    file_contents: dict[str, str],
+    files_changed: list[str],
+) -> tuple[dict, str]:
+    prompt = _build_prompt(user_note, file_contents, files_changed)
+
+    try:
+        response = _client.models.generate_content(model=_MODEL, contents=prompt)
+        raw = response.text
+    except Exception as e:
+        raise RuntimeError(f"Gemini API call failed: {e}") from e
+
+    try:
+        briefing = _parse_response(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Gemini returned invalid JSON: {e}\n\nRaw response:\n{raw}") from e
+
+    briefing.setdefault("goal", "")
+    briefing.setdefault("stuck_point", "")
+    briefing.setdefault("next_steps", [])
+    briefing.setdefault("files_changed", files_changed)
+    briefing.setdefault("tags", [])
+
+    return briefing, raw
+
+
 def analyze_error(raw_error: str, occurrence_count: int = 0) -> tuple[dict, str]:
-    """
-    Analyze an error message with Gemini.
-    Returns (parsed_analysis_dict, raw_response_text).
-    """
     loop_note = ""
     if occurrence_count >= 2:
         loop_note = (
@@ -104,7 +128,7 @@ def analyze_error(raw_error: str, occurrence_count: int = 0) -> tuple[dict, str]
     prompt = f"{ERROR_PROMPT}{loop_note}\n\n---\n## Error\n```\n{raw_error}\n```\n---\nReturn the JSON analysis now:"
 
     try:
-        response = _model.generate_content(prompt)
+        response = _client.models.generate_content(model=_MODEL, contents=prompt)
         raw = response.text
     except Exception as e:
         raise RuntimeError(f"Gemini API call failed: {e}") from e
@@ -122,34 +146,3 @@ def analyze_error(raw_error: str, occurrence_count: int = 0) -> tuple[dict, str]
     analysis.setdefault("tags", [])
 
     return analysis, raw
-
-
-def generate_briefing(
-    user_note: Optional[str],
-    file_contents: dict[str, str],
-    files_changed: list[str],
-) -> tuple[dict, str]:
-    """
-    Returns (parsed_briefing_dict, raw_response_text).
-    Raises on API or parse errors.
-    """
-    prompt = _build_prompt(user_note, file_contents, files_changed)
-
-    try:
-        response = _model.generate_content(prompt)
-        raw = response.text
-    except Exception as e:
-        raise RuntimeError(f"Gemini API call failed: {e}") from e
-
-    try:
-        briefing = _parse_response(raw)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Gemini returned invalid JSON: {e}\n\nRaw response:\n{raw}") from e
-
-    # Validate required keys with defaults
-    briefing.setdefault("goal", "")
-    briefing.setdefault("stuck_point", "")
-    briefing.setdefault("next_steps", [])
-    briefing.setdefault("files_changed", files_changed)
-
-    return briefing, raw
