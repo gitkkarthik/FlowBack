@@ -4,12 +4,18 @@ flowback CLI — pick up exactly where you left off.
 Commands:
   flowback pause <path1> <path2> ... [--note "optional note"]
   flowback resume [--all]
+  flowback error [message] [--project path]
+  flowback errors
   flowback tags
+  flowback graph
 """
 
 from __future__ import annotations
 
+import json
 import sys
+import tempfile
+import webbrowser
 from itertools import groupby
 from pathlib import Path
 from typing import Annotated, Optional
@@ -534,3 +540,124 @@ def tags() -> None:
     console.print()
     console.print(table)
     console.print()
+
+
+@app.command()
+def graph() -> None:
+    """Open the error graph in your browser — no server needed."""
+    database.init_db()
+
+    data = database.get_error_graph_data()
+
+    if not data["nodes"]:
+        console.print(
+            Panel(
+                "No errors tracked yet.\nRun [bold]flowback error \"<your error>\"[/bold] to start building the graph.",
+                border_style="yellow",
+                title="Nothing to graph",
+            )
+        )
+        raise typer.Exit(0)
+
+    node_count = len(data["nodes"])
+    link_count = len(data["links"])
+
+    html = _build_graph_html(data)
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".html", delete=False, prefix="flowback_graph_"
+    ) as f:
+        f.write(html)
+        path = f.name
+
+    webbrowser.open(f"file://{path}")
+    console.print(
+        f"\n  [bold green]Graph opened in your browser[/bold green] "
+        f"[dim]({node_count} nodes, {link_count} links)[/dim]"
+    )
+    console.print(f"  [dim]File: {path}[/dim]\n")
+
+
+def _build_graph_html(data: dict) -> str:
+    graph_json = json.dumps(data)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>FlowBack — Error Graph</title>
+  <style>
+    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+    body {{ background: #0f172a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #e2e8f0; overflow: hidden; }}
+    #graph {{ width: 100vw; height: 100vh; }}
+    #legend {{
+      position: fixed; top: 16px; left: 16px;
+      background: rgba(15,23,42,0.85); backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+      padding: 14px 18px; display: flex; flex-direction: column; gap: 8px;
+    }}
+    .legend-title {{ font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 2px; }}
+    .legend-item {{ display: flex; align-items: center; gap: 8px; font-size: 12px; color: #cbd5e1; }}
+    .dot {{ width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }}
+    #tooltip {{
+      position: fixed; pointer-events: none; display: none;
+      background: rgba(15,23,42,0.95); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px; padding: 10px 14px; max-width: 260px;
+      font-size: 13px; line-height: 1.5; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }}
+    .tooltip-type {{ font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }}
+    .tooltip-label {{ font-weight: 600; font-size: 14px; margin-bottom: 4px; }}
+    .tooltip-count {{ font-size: 12px; color: #94a3b8; }}
+    .tooltip-cause {{ font-size: 12px; color: #94a3b8; margin-top: 6px; border-top: 1px solid rgba(255,255,255,0.07); padding-top: 6px; }}
+    #hint {{ position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); font-size: 11px; color: #475569; }}
+  </style>
+</head>
+<body>
+  <div id="graph"></div>
+  <div id="legend">
+    <div class="legend-title">Node types</div>
+    <div class="legend-item"><div class="dot" style="background:#ef4444"></div> Error — size = occurrences</div>
+    <div class="legend-item"><div class="dot" style="background:#3b82f6"></div> Project</div>
+    <div class="legend-item"><div class="dot" style="background:#a855f7"></div> Skill tag — size = involvement</div>
+  </div>
+  <div id="tooltip"></div>
+  <div id="hint">Scroll to zoom · Drag to pan · Hover nodes for details</div>
+  <script src="https://unpkg.com/force-graph@1.43.5/dist/force-graph.min.js"></script>
+  <script>
+    const NODE_COLORS = {{ error: "#ef4444", project: "#3b82f6", tag: "#a855f7" }};
+    const NODE_LABELS = {{ error: "Error", project: "Project", tag: "Skill Tag" }};
+    const rawData = {graph_json};
+    const graphData = {{
+      nodes: rawData.nodes.map(n => ({{ ...n }})),
+      links: rawData.links.map(l => ({{ ...l }})),
+    }};
+    const tooltip = document.getElementById("tooltip");
+    const Graph = ForceGraph()(document.getElementById("graph"))
+      .graphData(graphData)
+      .backgroundColor("#0f172a")
+      .nodeRelSize(1)
+      .nodeVal(n => Math.pow(Math.min(24, Math.max(6, 4 + (n.count || 1) * 3)), 2))
+      .nodeColor(n => NODE_COLORS[n.type] || "#64748b")
+      .nodeLabel(() => "")
+      .linkColor(() => "rgba(148,163,184,0.2)")
+      .linkWidth(1)
+      .cooldownTicks(120)
+      .onNodeHover(node => {{
+        if (!node) {{ tooltip.style.display = "none"; return; }}
+        const color = NODE_COLORS[node.type] || "#64748b";
+        tooltip.innerHTML = `
+          <div class="tooltip-type" style="color:${{color}}">${{NODE_LABELS[node.type] || node.type}}</div>
+          <div class="tooltip-label">${{node.label || node.id}}</div>
+          ${{node.count ? `<div class="tooltip-count">Seen ${{node.count}} time${{node.count !== 1 ? "s" : ""}}</div>` : ""}}
+          ${{node.root_cause ? `<div class="tooltip-cause">${{node.root_cause}}</div>` : ""}}
+        `;
+        tooltip.style.display = "block";
+      }})
+      .onNodeClick(node => {{ Graph.centerAt(node.x, node.y, 600); Graph.zoom(4, 600); }});
+    document.addEventListener("mousemove", e => {{
+      tooltip.style.left = (e.clientX + 16) + "px";
+      tooltip.style.top  = (e.clientY + 16) + "px";
+    }});
+    setTimeout(() => Graph.zoomToFit(400, 60), 500);
+  </script>
+</body>
+</html>"""
