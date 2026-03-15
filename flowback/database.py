@@ -49,7 +49,8 @@ def init_db():
             root_cause TEXT,
             solution TEXT NOT NULL DEFAULT '[]',
             prevention TEXT,
-            tags TEXT NOT NULL DEFAULT '[]'
+            tags TEXT NOT NULL DEFAULT '[]',
+            project_path TEXT
         );
     """)
 
@@ -57,6 +58,7 @@ def init_db():
     for migration in [
         "ALTER TABLE briefings ADD COLUMN project_path TEXT",
         "ALTER TABLE briefings ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'",
+        "ALTER TABLE errors ADD COLUMN project_path TEXT",
     ]:
         try:
             cursor.execute(migration)
@@ -229,13 +231,14 @@ def insert_error(
     solution: list[str],
     prevention: Optional[str],
     tags: Optional[list[str]] = None,
+    project_path: Optional[str] = None,
 ) -> int:
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         """
-        INSERT INTO errors (raw_error, fingerprint, error_type, root_cause, solution, prevention, tags)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO errors (raw_error, fingerprint, error_type, root_cause, solution, prevention, tags, project_path)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             raw_error,
@@ -245,6 +248,7 @@ def insert_error(
             json.dumps(solution),
             prevention,
             json.dumps(tags or []),
+            project_path,
         ),
     )
     conn.commit()
@@ -302,6 +306,70 @@ def get_error_summary() -> list[dict]:
             seen[fp]["first_seen"] = parsed["created_at"]  # oldest since we go desc
 
     return sorted(seen.values(), key=lambda x: -x["count"])
+
+
+def get_error_graph_data() -> dict:
+    """Return nodes and links for a force-directed error graph."""
+    errors = list_errors()
+
+    error_nodes: dict[str, dict] = {}
+    project_nodes: dict[str, dict] = {}
+    tag_nodes: dict[str, dict] = {}
+    links: dict[tuple, dict] = {}
+
+    def _add_link(source: str, target: str):
+        key = (source, target)
+        if key in links:
+            links[key]["value"] += 1
+        else:
+            links[key] = {"source": source, "target": target, "value": 1}
+
+    for error in errors:
+        fp = error["fingerprint"]
+        node_id = f"error:{fp}"
+
+        if node_id not in error_nodes:
+            error_nodes[node_id] = {
+                "id": node_id,
+                "type": "error",
+                "label": error.get("error_type") or "Unknown",
+                "fingerprint": fp,
+                "count": 1,
+                "root_cause": error.get("root_cause") or "",
+            }
+        else:
+            error_nodes[node_id]["count"] += 1
+
+        project_path = error.get("project_path")
+        if project_path:
+            project_name = Path(project_path).name or project_path
+            proj_id = f"project:{project_name}"
+            if proj_id not in project_nodes:
+                project_nodes[proj_id] = {
+                    "id": proj_id,
+                    "type": "project",
+                    "label": project_name,
+                    "count": 1,
+                }
+            else:
+                project_nodes[proj_id]["count"] += 1
+            _add_link(node_id, proj_id)
+
+        for tag in error.get("tags", []):
+            tag_id = f"tag:{tag}"
+            if tag_id not in tag_nodes:
+                tag_nodes[tag_id] = {
+                    "id": tag_id,
+                    "type": "tag",
+                    "label": tag,
+                    "count": 1,
+                }
+            else:
+                tag_nodes[tag_id]["count"] += 1
+            _add_link(node_id, tag_id)
+
+    nodes = list(error_nodes.values()) + list(project_nodes.values()) + list(tag_nodes.values())
+    return {"nodes": nodes, "links": list(links.values())}
 
 
 def get_all_tag_counts() -> list[dict]:

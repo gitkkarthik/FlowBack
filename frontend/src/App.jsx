@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { PauseScreen } from "./components/PauseScreen";
 import { ResumeScreen } from "./components/ResumeScreen";
+import { ErrorGraph } from "./components/ErrorGraph";
 
 const API = "http://localhost:8000";
 
@@ -45,11 +46,23 @@ export default function App() {
         >
           Resume
         </button>
+        <button
+          onClick={() => setScreen("graph")}
+          className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+            screen === "graph"
+              ? "bg-red-600 text-white"
+              : "text-gray-500 hover:text-gray-800"
+          }`}
+        >
+          Graph
+        </button>
       </nav>
 
       <div className="pt-14">
         {screen === "pause" ? (
           <PauseScreen onSaved={() => setScreen("resume")} />
+        ) : screen === "graph" ? (
+          <ErrorGraph />
         ) : (
           <ResumeScreen onBack={() => setScreen("pause")} />
         )}

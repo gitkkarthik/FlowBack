@@ -200,3 +200,8 @@ def get_tag_history(tag: str):
 def list_snapshots():
     rows = database.list_snapshots()
     return [SnapshotListItem(**row) for row in rows]
+
+
+@app.get("/error-graph")
+def get_error_graph():
+    return database.get_error_graph_data()

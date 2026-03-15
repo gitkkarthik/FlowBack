@@ -310,6 +310,7 @@ def resume(
 @app.command()
 def error(
     message: Annotated[Optional[str], typer.Argument(help="Error message to analyze (omit to read from stdin)")] = None,
+    project: Annotated[Optional[str], typer.Option("--project", "-p", help="Project path (defaults to cwd)")] = None,
 ) -> None:
     """Track an error, get a fix, and see if you're stuck in a loop."""
     database.init_db()
@@ -362,6 +363,7 @@ def error(
                 pass  # keep original analysis
 
     # Save to DB
+    project_path = project if project else str(Path.cwd())
     database.insert_error(
         raw_error=raw_error,
         fingerprint=fingerprint,
@@ -370,6 +372,7 @@ def error(
         solution=analysis.get("solution", []),
         prevention=analysis.get("prevention"),
         tags=analysis.get("tags", []),
+        project_path=project_path,
     )
     total_occurrences = occurrence_count + 1
 
