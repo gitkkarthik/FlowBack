@@ -124,6 +124,42 @@ graph TD
 
 ---
 
+## Claude Code — MCP Integration
+
+Connect FlowBack directly to Claude Code so your context, errors, and skill gaps are available as Claude tools — no commands to remember.
+
+### Setup
+
+```bash
+# 1. Install (if not done already)
+pip install -e .
+
+# 2. Register with Claude Code
+claude mcp add flowback flowback-mcp
+```
+
+### Tools available inside Claude
+
+| Tool | What it does |
+|---|---|
+| `pause` | Scan project folders and save your context |
+| `resume` | Get your last briefing — what you were working on and what to do next |
+| `track_error` | Analyze an error, get root cause + fix, detect loops |
+| `skill_gaps` | See recurring error patterns and skill areas to strengthen |
+
+### Example prompts
+
+```
+"Resume my context from yesterday"
+"I'm getting this error: [paste error] — track it and tell me the fix"
+"What are my recurring skill gaps?"
+"Save my context for ~/projects/fashio-ai before I switch tasks"
+```
+
+Claude will automatically call the right FlowBack tool and return the analysis inline.
+
+---
+
 ## Web UI (optional)
 
 A React/Vite web interface is included if you prefer a browser experience. It requires the backend server to be running.

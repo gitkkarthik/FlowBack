@@ -14,10 +14,12 @@ dependencies = [
     "google-genai>=1.0.0",
     "python-dotenv>=1.0.1",
     "pydantic>=2.8.2",
+    "mcp>=1.0.0",
 ]
 
 [project.scripts]
 flowback = "flowback.cli:app"
+flowback-mcp = "flowback.mcp_server:main"
 
 [tool.setuptools.packages.find]
 include = ["flowback*"]
