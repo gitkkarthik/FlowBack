@@ -27,7 +27,7 @@ from rich.table import Table
 from rich.text import Text
 from rich import box
 
-from flowback import capture, database, gemini
+from flowback import capture, database, llm
 
 app = typer.Typer(
     name="flowback",
@@ -233,13 +233,13 @@ def pause(
 
         with console.status(f"[cyan]Generating briefing for [bold]{label}[/bold]…[/cyan]"):
             try:
-                briefing_data, raw = gemini.generate_briefing(
+                briefing_data, raw = llm.generate_briefing(
                     user_note=note,
                     file_contents=project_contents,
                     files_changed=project_files,
                 )
             except (RuntimeError, ValueError) as e:
-                err_console.print(f"[red]Gemini error for {label}:[/red] {e}")
+                err_console.print(f"[red]LLM error for {label}:[/red] {e}")
                 continue
 
         database.insert_briefing(
@@ -351,9 +351,9 @@ def error(
         existing = database.list_errors()
         # Call Gemini — pass 0 first, we'll re-check after
         try:
-            analysis, raw = gemini.analyze_error(raw_error, occurrence_count=0)
+            analysis, raw = llm.analyze_error(raw_error, occurrence_count=0)
         except (RuntimeError, ValueError) as e:
-            err_console.print(f"[red]Gemini error:[/red] {e}")
+            err_console.print(f"[red]LLM error:[/red] {e}")
             raise typer.Exit(1)
 
     fingerprint = analysis["fingerprint"]
@@ -364,7 +364,7 @@ def error(
     if occurrence_count >= 2:
         with console.status(f"[red]Seen {occurrence_count} times — generating loop-break advice…[/red]"):
             try:
-                analysis, raw = gemini.analyze_error(raw_error, occurrence_count=occurrence_count)
+                analysis, raw = llm.analyze_error(raw_error, occurrence_count=occurrence_count)
             except (RuntimeError, ValueError):
                 pass  # keep original analysis
 

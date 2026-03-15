@@ -1,82 +1,137 @@
 # FlowBack
 
-Pick up exactly where you left off. Before you step away from your code, run one command. When you come back, run another. FlowBack scans your recently modified files, sends them to Gemini AI, and hands you a focused briefing — per project, with error tracking and skill gap visualization.
+> Pick up exactly where you left off.
+
+FlowBack is a developer productivity tool that saves your coding context before a break and brings you back up to speed instantly when you return. It tracks errors across projects, detects recurring patterns, and visualizes skill gaps — all from your terminal.
+
+---
+
+## How it works
+
+```
+Before break          After break           When errors hit
+─────────────         ────────────          ────────────────
+flowback pause        flowback resume       flowback error "..."
+      │                     │                      │
+      ▼                     ▼                      ▼
+Scans recently      Shows per-project       Root cause + fix
+modified files      AI briefing:            steps. Detects if
+across projects     goal, stuck point,      you're hitting the
+                    next 3 steps, tags      same error again
+```
 
 ---
 
 ## Install
 
 ```bash
-# Clone the repo
 git clone https://github.com/gitkkarthik/FlowBack.git
 cd FlowBack
-
-# Install the CLI
 pip install -e .
 ```
 
-Get a free Gemini API key at [aistudio.google.com](https://aistudio.google.com/app/apikey), then create `~/.flowback/.env`:
+Create `~/.flowback/.env` with your API key. FlowBack works with any LLM provider via [litellm](https://docs.litellm.ai/docs/providers):
 
+**Google Gemini** (free tier available — recommended)
 ```
-GEMINI_API_KEY=your_key_here
+LLM_MODEL=gemini/gemini-2.5-flash
+LLM_API_KEY=your_gemini_key
+```
+→ Get a free key at [aistudio.google.com](https://aistudio.google.com/app/apikey)
+
+**OpenAI**
+```
+LLM_MODEL=gpt-4o
+LLM_API_KEY=your_openai_key
+```
+
+**Anthropic Claude**
+```
+LLM_MODEL=claude-3-5-sonnet-20241022
+LLM_API_KEY=your_anthropic_key
+```
+
+**Groq** (fast + free tier)
+```
+LLM_MODEL=groq/llama-3.1-70b-versatile
+LLM_API_KEY=your_groq_key
+```
+
+**Ollama** (fully local — no API key needed)
+```
+LLM_MODEL=ollama/llama3
+LLM_API_BASE=http://localhost:11434
 ```
 
 That's it. No server to run. Works from any terminal.
 
 ---
 
-## Usage
+## CLI Usage
 
-### Save context before stepping away
+### `flowback pause` — save context before stepping away
 
 ```bash
 flowback pause ~/projects/myapp
-flowback pause ~/projects/myapp ~/projects/other   # multiple projects
-flowback pause ~/projects/myapp --note "debugging auth middleware"
+flowback pause ~/projects/myapp ~/projects/other     # multiple projects at once
+flowback pause ~/projects/myapp --note "debugging auth middleware, getting 401s"
 ```
 
-### Resume when you're back
+### `flowback resume` — pick up where you left off
 
 ```bash
 flowback resume          # latest session
 flowback resume --all    # all past sessions
 ```
 
-Each project gets its own briefing: **your goal**, **where you were stuck**, **next 3 steps**, and **auto-generated skill tags**.
+Each project gets its own AI briefing:
 
-### Track errors
+```
+─────────────── Session #18  2026-03-15 11:49  ───────────────
+
+╭─ fashio-ai — Goal ──────────────────────────────────────────╮
+│ Building AI-powered fashion virtual try-on with image       │
+│ processing and Supabase storage integration.                │
+╰─────────────────────────────────────────────────────────────╯
+╭─ Stuck point ───────────────────────────────────────────────╮
+│ Client-side cropped images not returning public URLs        │
+│ from Supabase for AI service consumption.                   │
+╰─────────────────────────────────────────────────────────────╯
+╭─ Next steps ────────────────────────────────────────────────╮
+│ 1. Debug ensurePublicUrl in src/lib/ai-service.ts           │
+│ 2. Add error logging to upload pipeline                     │
+│ 3. Test with small static images first                      │
+╰─────────────────────────────────────────────────────────────╯
+  #file-upload  #supabase-storage  #api-integration
+```
+
+### `flowback error` — track errors and break loops
 
 ```bash
-# Paste an error
+# Paste an error directly
 flowback error "TypeError: Cannot read properties of undefined"
 
-# Or pipe directly from a command
+# Pipe from any command
 npm run build 2>&1 | flowback error
 python manage.py migrate 2>&1 | flowback error
 
-# See all tracked errors with counts
+# See all tracked errors with occurrence counts
 flowback errors
 ```
 
-First time → root cause + fix steps. Third time hitting the same error → **"break the loop"** advice tailored to your specific recurring pattern.
+| Occurrences | Response |
+|---|---|
+| 1st time | Root cause + 3 fix steps + prevention tip |
+| 2nd time | ⚠ "Seen twice — watch this pattern" |
+| 3rd+ time | 🔁 "You're in a loop!" + tailored break-the-loop advice |
 
-### See skill gaps as a graph
+### `flowback graph` — visualize skill gaps
 
 ```bash
 flowback graph
 ```
 
-Opens a force-directed graph in your browser (no server needed — generates a local HTML file). Shows which errors keep coming back, which projects they span, and which skill areas to strengthen.
-
-### Browse recurring tags
-
-```bash
-flowback tags
-```
-
----
-
-## How the graph works
+Generates a self-contained HTML file and opens it in your browser — no server needed. Shows a force-directed graph of your errors, the projects they appeared in, and the skill areas they involve.
 
 ```mermaid
 graph TD
@@ -99,91 +154,114 @@ graph TD
     E4 --- T4("#dependency"):::tag
 ```
 
-> `TypeError` is connected to **both projects** → cross-cutting knowledge gap, not project-specific.
-> `#auth-token` is shared by two errors → auth is a skill area to strengthen.
-
-| Color | Type | What it represents |
+| Node | Color | Meaning |
 |---|---|---|
-| 🔴 Red | Error | A unique error type. Size = how many times you've hit it. |
-| 🔵 Blue | Project | A project where errors occurred. |
-| 🟣 Purple | Skill tag | A skill area extracted from the error. Size = how often it's involved. |
+| Error | 🔴 Red | A unique error type — size = how many times you've hit it |
+| Project | 🔵 Blue | A project where errors occurred |
+| Skill tag | 🟣 Purple | A skill area extracted from errors — size = how often it's involved |
 
-**How to read it**
-- Large red node = error you keep hitting — fix it properly
-- Large purple node with many connections = skill gap worth studying
-- Red node connected to multiple blue nodes = cross-cutting knowledge gap, not project-specific
+- **Large red node** → recurring error, fix it properly
+- **Red node linked to multiple blue nodes** → cross-cutting knowledge gap, not project-specific
+- **Large purple node** → skill area to study
 
----
+### `flowback tags` — browse skill tags
 
-## Stack
-
-- **Python** — CLI, file scanning, SQLite
-- **Google Gemini 2.5 Flash** — AI briefings, error analysis, tag generation
-- **Typer + Rich** — CLI interface
-- **force-graph.js** — graph visualization (embedded in generated HTML)
+```bash
+flowback tags
+```
 
 ---
 
 ## Claude Code — MCP Integration
 
-Connect FlowBack directly to Claude Code so your context, errors, and skill gaps are available as Claude tools — no commands to remember.
+Connect FlowBack directly to Claude Code. Your context, errors, and skill gaps become Claude tools — available through natural language, no commands needed.
 
 ### Setup
 
 ```bash
-# 1. Install (if not done already)
-pip install -e .
-
-# 2. Register with Claude Code
+# Register with Claude Code (one time)
 claude mcp add flowback flowback-mcp
 ```
 
-### Tools available inside Claude
+### Tools
 
 | Tool | What it does |
 |---|---|
-| `pause` | Scan project folders and save your context |
-| `resume` | Get your last briefing — what you were working on and what to do next |
-| `track_error` | Analyze an error, get root cause + fix, detect loops |
-| `skill_gaps` | See recurring error patterns and skill areas to strengthen |
+| `resume` | Returns your last briefing so Claude has full context at session start |
+| `pause` | Scans project folders and saves context |
+| `track_error` | Analyzes an error, returns root cause + fix, detects loops |
+| `skill_gaps` | Returns recurring patterns and skill areas to strengthen |
 
-### Example prompts
+### Example prompts in Claude Code
 
 ```
 "Resume my context from yesterday"
-"I'm getting this error: [paste error] — track it and tell me the fix"
-"What are my recurring skill gaps?"
-"Save my context for ~/projects/fashio-ai before I switch tasks"
+"I'm getting this error — track it and tell me the fix: [paste error]"
+"What skill gaps am I building up?"
+"Save my context for ~/projects/myapp before I take a break"
 ```
 
-Claude will automatically call the right FlowBack tool and return the analysis inline.
+Claude calls the right tool automatically and returns the analysis inline.
 
 ---
 
 ## Web UI (optional)
 
-A React/Vite web interface is included if you prefer a browser experience. It requires the backend server to be running.
+A React/Vite browser interface is included for those who prefer a visual workflow. Requires both servers running.
 
 ```bash
-# Terminal 1 — backend
+# Terminal 1 — API server
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload     # runs at http://localhost:8000
+uvicorn main:app --reload        # http://localhost:8000
 
 # Terminal 2 — frontend
 cd frontend
 npm install
-npm run dev                   # runs at http://localhost:5173
+npm run dev                      # http://localhost:5173
 ```
 
-The web UI offers the same Pause / Resume workflow plus the Graph tab, all in the browser.
+Three tabs: **Pause** · **Resume** · **Graph**
+
+---
+
+## Project structure
+
+```
+FlowBack/
+├── flowback/
+│   ├── cli.py          # flowback CLI commands
+│   ├── mcp_server.py   # Claude Code MCP tools
+│   ├── capture.py      # file scanner
+│   ├── database.py     # SQLite (~/.flowback/history.db)
+│   ├── llm.py          # Multi-provider LLM integration (litellm)
+│   └── models.py       # Pydantic models
+├── backend/
+│   └── main.py         # FastAPI server (web UI only)
+├── frontend/           # React/Vite web UI (optional)
+├── pyproject.toml      # pip package config
+└── setup.py
+```
+
+---
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| AI | Any provider via litellm (Gemini, OpenAI, Claude, Groq, Ollama…) |
+| CLI | Python, Typer, Rich |
+| Graph | force-graph.js (self-contained HTML) |
+| Storage | SQLite (`~/.flowback/history.db`) |
+| MCP | Anthropic MCP SDK |
+| Web UI (optional) | FastAPI, React 18, Vite, Tailwind CSS |
 
 ---
 
 ## Notes
 
-- All data stays local — nothing leaves your machine except file snippets sent to Gemini.
-- Scans up to 5 recently modified files per folder (last 2 hours), skipping binaries, `node_modules`, `.git`, and build output.
-- History is stored at `~/.flowback/history.db` — shared between CLI and web UI.
-- The **Choose folder** button in the web UI is macOS-only (`osascript`). On other platforms, type the path manually.
+- All data stays local — the only thing that leaves your machine is file snippets sent to your configured LLM for analysis. With Ollama, nothing leaves your machine at all.
+- Scans up to 5 recently modified files per folder within the last 2 hours, skipping binaries, `node_modules`, `.git`, and build output.
+- History is stored at `~/.flowback/history.db` — shared between the CLI, MCP server, and web UI.
+- The **Choose folder** button in the web UI is macOS-only (`osascript`). On other platforms type the path manually.

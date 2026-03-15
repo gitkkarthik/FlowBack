@@ -22,11 +22,11 @@ from typing import Optional
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
-# Load API key before importing gemini
+# Load API key before importing llm
 load_dotenv(Path.home() / ".flowback" / ".env")
 load_dotenv()
 
-from flowback import capture, database, gemini  # noqa: E402
+from flowback import capture, database, llm  # noqa: E402
 
 database.init_db()
 
@@ -122,7 +122,7 @@ def pause(paths: list[str], note: Optional[str] = None) -> str:
             continue
 
         try:
-            briefing_data, raw = gemini.generate_briefing(
+            briefing_data, raw = llm.generate_briefing(
                 user_note=note,
                 file_contents=project_contents,
                 files_changed=project_files,
@@ -202,9 +202,9 @@ def track_error(error: str, project: Optional[str] = None) -> str:
     existing = database.list_errors()
 
     try:
-        analysis, raw = gemini.analyze_error(error, occurrence_count=0)
+        analysis, raw = llm.analyze_error(error, occurrence_count=0)
     except (RuntimeError, ValueError) as e:
-        return f"Error analyzing with Gemini: {e}"
+        return f"Error analyzing with LLM: {e}"
 
     fingerprint = analysis["fingerprint"]
     prior = [e for e in existing if e["fingerprint"] == fingerprint]
@@ -212,7 +212,7 @@ def track_error(error: str, project: Optional[str] = None) -> str:
 
     if occurrence_count >= 2:
         try:
-            analysis, raw = gemini.analyze_error(error, occurrence_count=occurrence_count)
+            analysis, raw = llm.analyze_error(error, occurrence_count=occurrence_count)
         except (RuntimeError, ValueError):
             pass
 

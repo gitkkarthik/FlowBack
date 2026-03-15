@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from flowback import database
 from flowback import capture
-from flowback import gemini
+from flowback import llm
 from flowback.models import (
     BriefingResponse,
     SnapshotListItem,
@@ -105,7 +105,7 @@ def create_briefing(snapshot_id: int):
             continue
 
         try:
-            briefing_data, raw = gemini.generate_briefing(
+            briefing_data, raw = llm.generate_briefing(
                 user_note=snapshot["user_note"],
                 file_contents=project_contents,
                 files_changed=project_files,
