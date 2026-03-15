@@ -308,6 +308,189 @@ def resume(
 
 
 @app.command()
+def error(
+    message: Annotated[Optional[str], typer.Argument(help="Error message to analyze (omit to read from stdin)")] = None,
+) -> None:
+    """Track an error, get a fix, and see if you're stuck in a loop."""
+    database.init_db()
+
+    # Read error text from argument or stdin
+    if message:
+        raw_error = message.strip()
+    elif not sys.stdin.isatty():
+        raw_error = sys.stdin.read().strip()
+    else:
+        console.print("[dim]Paste your error below and press [bold]Ctrl+D[/bold] when done:[/dim]")
+        try:
+            lines = []
+            while True:
+                line = input()
+                lines.append(line)
+        except EOFError:
+            raw_error = "\n".join(lines).strip()
+
+    if not raw_error:
+        err_console.print("[red]No error text provided.[/red]")
+        raise typer.Exit(1)
+
+    # Check prior occurrences using existing errors (before AI call)
+    # We'll do a quick pre-check after getting the fingerprint from AI
+    console.print()
+    console.rule("[bold red]flowback error[/bold red]", style="red")
+    console.print()
+
+    with console.status("[red]Analyzing error…[/red]"):
+        # Get prior errors to compute occurrence count after we have fingerprint
+        existing = database.list_errors()
+        # Call Gemini — pass 0 first, we'll re-check after
+        try:
+            analysis, raw = gemini.analyze_error(raw_error, occurrence_count=0)
+        except (RuntimeError, ValueError) as e:
+            err_console.print(f"[red]Gemini error:[/red] {e}")
+            raise typer.Exit(1)
+
+    fingerprint = analysis["fingerprint"]
+    prior = [e for e in existing if e["fingerprint"] == fingerprint]
+    occurrence_count = len(prior)
+
+    # If recurring, re-call Gemini with the count so it tailors prevention advice
+    if occurrence_count >= 2:
+        with console.status(f"[red]Seen {occurrence_count} times — generating loop-break advice…[/red]"):
+            try:
+                analysis, raw = gemini.analyze_error(raw_error, occurrence_count=occurrence_count)
+            except (RuntimeError, ValueError):
+                pass  # keep original analysis
+
+    # Save to DB
+    database.insert_error(
+        raw_error=raw_error,
+        fingerprint=fingerprint,
+        error_type=analysis.get("error_type"),
+        root_cause=analysis.get("root_cause"),
+        solution=analysis.get("solution", []),
+        prevention=analysis.get("prevention"),
+        tags=analysis.get("tags", []),
+    )
+    total_occurrences = occurrence_count + 1
+
+    # --- Output ---
+
+    # Occurrence badge
+    if total_occurrences == 1:
+        badge = "[bold green]First time seeing this one.[/bold green]"
+    elif total_occurrences == 2:
+        badge = "[bold yellow]⚠  Seen twice — watch this pattern.[/bold yellow]"
+    else:
+        badge = f"[bold red]🔁  Hit {total_occurrences} times — you're in a loop![/bold red]"
+
+    console.print(f"  {badge}")
+    console.print(f"  [dim]Fingerprint: {fingerprint}[/dim]\n")
+
+    # Root cause
+    root_cause = analysis.get("root_cause", "")
+    if root_cause:
+        console.print(
+            Panel(
+                f"[yellow]{root_cause}[/yellow]",
+                title="Root cause",
+                border_style="yellow",
+                padding=(0, 2),
+            )
+        )
+
+    # Solution steps
+    steps = analysis.get("solution", [])
+    if steps:
+        steps_text = Text()
+        for i, step in enumerate(steps, 1):
+            steps_text.append(f"{i}. ", style="bold green")
+            steps_text.append(step + "\n", style="green")
+        console.print(
+            Panel(steps_text, title="How to fix it", border_style="green", padding=(0, 2))
+        )
+
+    # Prevention — shown prominently if recurring
+    prevention = analysis.get("prevention", "")
+    if prevention:
+        border = "red" if total_occurrences >= 3 else "dim"
+        title = "Break the loop — do this now" if total_occurrences >= 3 else "Prevention"
+        console.print(
+            Panel(
+                f"[{'red' if total_occurrences >= 3 else 'dim'}]{prevention}[/{'red' if total_occurrences >= 3 else 'dim'}]",
+                title=title,
+                border_style=border,
+                padding=(0, 2),
+            )
+        )
+
+    # Tags
+    tags_list = analysis.get("tags", [])
+    if tags_list:
+        console.print("  " + _tag_pills(tags_list).markup)
+
+    # History list if recurring
+    if prior:
+        console.print(f"\n  [dim]Previous occurrences:[/dim]")
+        for p in prior[:5]:
+            ts = p["created_at"][:16]
+            console.print(f"  [dim]  · {ts}[/dim]")
+        if len(prior) > 5:
+            console.print(f"  [dim]  · ... and {len(prior) - 5} more. Run [bold]flowback errors[/bold] to see all.[/dim]")
+
+    console.print()
+
+
+@app.command()
+def errors() -> None:
+    """Show all tracked errors grouped by type with occurrence counts."""
+    database.init_db()
+
+    summary = database.get_error_summary()
+
+    if not summary:
+        console.print(
+            Panel(
+                "No errors tracked yet. Run [bold]flowback error \"<your error>\"[/bold] to start.",
+                border_style="yellow",
+                title="No errors found",
+            )
+        )
+        raise typer.Exit(0)
+
+    table = Table(
+        box=box.ROUNDED,
+        border_style="red",
+        header_style="bold red",
+        title="[bold red]Error History[/bold red]",
+        title_justify="left",
+        show_lines=True,
+        padding=(0, 1),
+    )
+    table.add_column("Error type", style="bold white", no_wrap=True)
+    table.add_column("Count", justify="right", style="bold white", no_wrap=True)
+    table.add_column("First seen", style="dim", no_wrap=True)
+    table.add_column("Last seen", style="dim", no_wrap=True)
+    table.add_column("Root cause", style="white")
+
+    for entry in summary:
+        count = entry["count"]
+        count_str = f"[bold red]{count}[/bold red]" if count >= 3 else (
+            f"[yellow]{count}[/yellow]" if count >= 2 else str(count)
+        )
+        table.add_row(
+            entry.get("error_type") or "Unknown",
+            count_str,
+            (entry.get("first_seen") or "")[:10],
+            (entry.get("created_at") or "")[:10],
+            (entry.get("root_cause") or "—")[:80],
+        )
+
+    console.print()
+    console.print(table)
+    console.print()
+
+
+@app.command()
 def tags() -> None:
     """List all tags with their occurrence counts."""
     database.init_db()

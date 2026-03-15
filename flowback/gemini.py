@@ -66,6 +66,64 @@ def _parse_response(text: str) -> dict:
     return json.loads(text.strip())
 
 
+ERROR_PROMPT = """You are a developer productivity assistant specializing in error analysis.
+Given an error message, return a JSON analysis.
+
+Return ONLY valid JSON with this exact structure:
+{
+  "fingerprint": "short normalized error identifier, no line numbers or file paths, lowercase hyphenated (e.g. 'typeerror-cannot-read-undefined', 'modulenotfounderror-missing-module')",
+  "error_type": "The error class or category (e.g. TypeError, CORS, 401 Unauthorized)",
+  "root_cause": "One clear sentence explaining why this error happens",
+  "solution": [
+    "Concrete step 1 to fix it",
+    "Concrete step 2 to fix it",
+    "Concrete step 3 to fix it"
+  ],
+  "prevention": "One actionable sentence on how to avoid hitting this error again in the future",
+  "tags": ["short-tag-1", "short-tag-2"]
+}
+
+For fingerprint: strip all line numbers, file paths, memory addresses, and specific values.
+Two occurrences of the same logical error must produce the same fingerprint.
+Do not include markdown code fences or any text outside the JSON object."""
+
+
+def analyze_error(raw_error: str, occurrence_count: int = 0) -> tuple[dict, str]:
+    """
+    Analyze an error message with Gemini.
+    Returns (parsed_analysis_dict, raw_response_text).
+    """
+    loop_note = ""
+    if occurrence_count >= 2:
+        loop_note = (
+            f"\n\nIMPORTANT: This error has occurred {occurrence_count + 1} times already. "
+            "In the 'prevention' field, give specific advice on breaking this recurring pattern, "
+            "not just a generic fix tip."
+        )
+
+    prompt = f"{ERROR_PROMPT}{loop_note}\n\n---\n## Error\n```\n{raw_error}\n```\n---\nReturn the JSON analysis now:"
+
+    try:
+        response = _model.generate_content(prompt)
+        raw = response.text
+    except Exception as e:
+        raise RuntimeError(f"Gemini API call failed: {e}") from e
+
+    try:
+        analysis = _parse_response(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Gemini returned invalid JSON: {e}\n\nRaw response:\n{raw}") from e
+
+    analysis.setdefault("fingerprint", "unknown-error")
+    analysis.setdefault("error_type", "Unknown")
+    analysis.setdefault("root_cause", "")
+    analysis.setdefault("solution", [])
+    analysis.setdefault("prevention", "")
+    analysis.setdefault("tags", [])
+
+    return analysis, raw
+
+
 def generate_briefing(
     user_note: Optional[str],
     file_contents: dict[str, str],

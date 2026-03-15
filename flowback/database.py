@@ -39,6 +39,18 @@ def init_db():
             tags TEXT NOT NULL DEFAULT '[]',
             raw_response TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS errors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            raw_error TEXT NOT NULL,
+            fingerprint TEXT NOT NULL,
+            error_type TEXT,
+            root_cause TEXT,
+            solution TEXT NOT NULL DEFAULT '[]',
+            prevention TEXT,
+            tags TEXT NOT NULL DEFAULT '[]'
+        );
     """)
 
     # Migrations for existing databases
@@ -207,6 +219,89 @@ def get_tag_history(tag: str) -> list[dict]:
         if tag in parsed["tags"]:
             results.append(parsed)
     return results
+
+
+def insert_error(
+    raw_error: str,
+    fingerprint: str,
+    error_type: Optional[str],
+    root_cause: Optional[str],
+    solution: list[str],
+    prevention: Optional[str],
+    tags: Optional[list[str]] = None,
+) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO errors (raw_error, fingerprint, error_type, root_cause, solution, prevention, tags)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            raw_error,
+            fingerprint,
+            error_type,
+            root_cause,
+            json.dumps(solution),
+            prevention,
+            json.dumps(tags or []),
+        ),
+    )
+    conn.commit()
+    error_id = cursor.lastrowid
+    conn.close()
+    return error_id
+
+
+def get_error_occurrences(fingerprint: str) -> list[dict]:
+    """Return all recorded instances of an error fingerprint, newest first."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM errors WHERE fingerprint = ? ORDER BY id DESC",
+        (fingerprint,),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [_parse_error_row(row) for row in rows]
+
+
+def list_errors() -> list[dict]:
+    """Return all errors newest first."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM errors ORDER BY id DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [_parse_error_row(row) for row in rows]
+
+
+def _parse_error_row(row) -> dict:
+    result = dict(row)
+    result["solution"] = json.loads(result.get("solution") or "[]")
+    result["tags"] = json.loads(result.get("tags") or "[]")
+    return result
+
+
+def get_error_summary() -> list[dict]:
+    """Return unique errors grouped by fingerprint with occurrence counts."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM errors ORDER BY id DESC")
+    rows = cursor.fetchall()
+    conn.close()
+
+    seen: dict[str, dict] = {}
+    for row in rows:
+        parsed = _parse_error_row(row)
+        fp = parsed["fingerprint"]
+        if fp not in seen:
+            seen[fp] = {**parsed, "count": 1, "first_seen": parsed["created_at"]}
+        else:
+            seen[fp]["count"] += 1
+            seen[fp]["first_seen"] = parsed["created_at"]  # oldest since we go desc
+
+    return sorted(seen.values(), key=lambda x: -x["count"])
 
 
 def get_all_tag_counts() -> list[dict]:
