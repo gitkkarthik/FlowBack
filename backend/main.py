@@ -1,3 +1,10 @@
+import sys
+from pathlib import Path
+
+# Ensure the repo root is on sys.path so `flowback` package is importable
+# regardless of which directory uvicorn is launched from.
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 
