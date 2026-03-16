@@ -15,7 +15,10 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
+import threading
+import urllib.request
 import webbrowser
+from importlib.metadata import version as pkg_version
 from itertools import groupby
 from pathlib import Path
 from typing import Annotated, Optional
@@ -38,6 +41,34 @@ app = typer.Typer(
 
 console = Console()
 err_console = Console(stderr=True)
+
+
+# ---------------------------------------------------------------------------
+# Upgrade check
+# ---------------------------------------------------------------------------
+
+def _check_for_upgrade() -> None:
+    """Check PyPI for a newer version and print a notice if found."""
+    try:
+        current = pkg_version("flowback")
+        with urllib.request.urlopen(
+            "https://pypi.org/pypi/flowback/json", timeout=2
+        ) as resp:
+            latest = json.loads(resp.read())["info"]["version"]
+        if latest != current:
+            console.print(
+                f"\n  [bold yellow]Update available:[/bold yellow] "
+                f"[dim]{current}[/dim] → [bold]{latest}[/bold]  "
+                f"Run: [bold cyan]pip install --upgrade flowback[/bold cyan]\n"
+            )
+    except Exception:
+        pass  # never block the CLI for an update check
+
+
+@app.callback(invoke_without_command=True)
+def _main(ctx: typer.Context) -> None:
+    if ctx.invoked_subcommand is not None:
+        threading.Thread(target=_check_for_upgrade, daemon=True).start()
 
 
 # ---------------------------------------------------------------------------
