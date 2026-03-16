@@ -28,11 +28,10 @@ across projects     goal, stuck point,      you're hitting the
 pip install flowback
 ```
 
-If `pip` is not found, try:
-
-```bash
-pip3 install flowback
-```
+> Requires Python 3.10+. On macOS, if `pip` is not found or you see "no matching distribution", use Homebrew Python:
+> ```bash
+> python3.11 -m pip install flowback
+> ```
 
 Then create `~/.flowback/.env` with your LLM API key. FlowBack works with any provider via [litellm](https://docs.litellm.ai/docs/providers):
 
