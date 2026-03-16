@@ -25,13 +25,9 @@ across projects     goal, stuck point,      you're hitting the
 ## Install
 
 ```bash
-pip install flowback
-```
-
-If `pip` is not found, try:
-
-```bash
-pip3 install flowback
+git clone https://github.com/gitkkarthik/FlowBack.git
+cd FlowBack
+pip3 install -e .
 ```
 
 Then create `~/.flowback/.env` with your LLM API key. FlowBack works with any provider via [litellm](https://docs.litellm.ai/docs/providers):
