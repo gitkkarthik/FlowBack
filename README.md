@@ -28,7 +28,7 @@ across projects     goal, stuck point,      you're hitting the
 pip install flowback
 ```
 
-Create `~/.flowback/.env` with your API key. FlowBack works with any LLM provider via [litellm](https://docs.litellm.ai/docs/providers):
+Then create `~/.flowback/.env` with your LLM API key. FlowBack works with any provider via [litellm](https://docs.litellm.ai/docs/providers):
 
 **Google Gemini** (free tier available — recommended)
 ```
@@ -177,6 +177,9 @@ Connect FlowBack directly to Claude Code. Your context, errors, and skill gaps b
 ### Setup
 
 ```bash
+# Install (if you haven't already)
+pip install flowback
+
 # Register with Claude Code (one time)
 claude mcp add flowback flowback-mcp
 ```
@@ -210,7 +213,6 @@ A React/Vite browser interface is included for those who prefer a visual workflo
 ```bash
 # Terminal 1 — API server
 cd backend
-python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --reload        # http://localhost:8000
 
@@ -229,17 +231,16 @@ Three tabs: **Pause** · **Resume** · **Graph**
 ```
 FlowBack/
 ├── flowback/
-│   ├── cli.py          # flowback CLI commands
+│   ├── cli.py          # CLI commands
 │   ├── mcp_server.py   # Claude Code MCP tools
 │   ├── capture.py      # file scanner
 │   ├── database.py     # SQLite (~/.flowback/history.db)
-│   ├── llm.py          # Multi-provider LLM integration (litellm)
+│   ├── llm.py          # multi-provider LLM integration (litellm)
 │   └── models.py       # Pydantic models
 ├── backend/
 │   └── main.py         # FastAPI server (web UI only)
 ├── frontend/           # React/Vite web UI (optional)
-├── pyproject.toml      # pip package config
-└── setup.py
+└── pyproject.toml
 ```
 
 ---
@@ -259,7 +260,7 @@ FlowBack/
 
 ## Notes
 
-- All data stays local — the only thing that leaves your machine is file snippets sent to your configured LLM for analysis. With Ollama, nothing leaves your machine at all.
+- All data stays local — the only thing that leaves your machine is file snippets sent to your configured LLM. With Ollama, nothing leaves your machine at all.
 - Scans up to 5 recently modified files per folder within the last 2 hours, skipping binaries, `node_modules`, `.git`, and build output.
 - History is stored at `~/.flowback/history.db` — shared between the CLI, MCP server, and web UI.
 - The **Choose folder** button in the web UI is macOS-only (`osascript`). On other platforms type the path manually.
