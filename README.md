@@ -25,7 +25,9 @@ across projects     goal, stuck point,      you're hitting the
 ## Install
 
 ```bash
-pip install flowback
+git clone https://github.com/gitkkarthik/FlowBack.git
+cd FlowBack
+pip3 install -e .
 ```
 
 Then create `~/.flowback/.env` with your LLM API key. FlowBack works with any provider via [litellm](https://docs.litellm.ai/docs/providers):
@@ -177,10 +179,7 @@ Connect FlowBack directly to Claude Code. Your context, errors, and skill gaps b
 ### Setup
 
 ```bash
-# Install (if you haven't already)
-pip install flowback
-
-# Register with Claude Code (one time)
+# Register with Claude Code (one time, after installing)
 claude mcp add flowback flowback-mcp
 ```
 
