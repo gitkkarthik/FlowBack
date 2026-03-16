@@ -173,15 +173,11 @@ def _print_session(
 
 @app.command()
 def pause(
-    paths: Annotated[list[str], typer.Argument(help="Project directories to snapshot")],
+    paths: Annotated[Optional[list[str]], typer.Argument(help="Project directories to snapshot (defaults to current directory)")] = None,
     note: Annotated[Optional[str], typer.Option("--note", "-n", help="Optional developer note")] = None,
 ) -> None:
     """Snapshot project folders and generate an AI briefing for each."""
-    if not paths:
-        err_console.print("[red]Error:[/red] Provide at least one project path.")
-        raise typer.Exit(1)
-
-    resolved = [_resolve_path(p) for p in paths]
+    resolved = [_resolve_path(p) for p in (paths or [str(Path.cwd())])]
 
     # Validate paths exist
     bad = [p for p in resolved if not Path(p).is_dir()]
