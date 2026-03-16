@@ -543,6 +543,53 @@ def tags() -> None:
 
 
 @app.command()
+def config() -> None:
+    """Show how to configure your LLM provider (~/.flowback/.env)."""
+    env_path = Path.home() / ".flowback" / ".env"
+    configured = env_path.exists()
+
+    console.print()
+    console.rule("[bold cyan]flowback config[/bold cyan]", style="cyan")
+    console.print()
+
+    if configured:
+        console.print(f"  [bold green]Config found:[/bold green] [dim]{env_path}[/dim]\n")
+    else:
+        console.print(f"  [yellow]No config yet.[/yellow] Create [bold]{env_path}[/bold]\n")
+
+    console.print(
+        Panel(
+            "\n".join([
+                "[bold]Google Gemini[/bold] [dim](free tier — recommended)[/dim]",
+                "  LLM_MODEL=gemini/gemini-2.5-flash",
+                "  LLM_API_KEY=your_gemini_key",
+                "  [dim]→ https://aistudio.google.com/app/apikey[/dim]",
+                "",
+                "[bold]OpenAI[/bold]",
+                "  LLM_MODEL=gpt-4o",
+                "  LLM_API_KEY=your_openai_key",
+                "",
+                "[bold]Anthropic Claude[/bold]",
+                "  LLM_MODEL=claude-3-5-sonnet-20241022",
+                "  LLM_API_KEY=your_anthropic_key",
+                "",
+                "[bold]Groq[/bold] [dim](fast + free tier)[/dim]",
+                "  LLM_MODEL=groq/llama-3.1-70b-versatile",
+                "  LLM_API_KEY=your_groq_key",
+                "",
+                "[bold]Ollama[/bold] [dim](fully local — no API key needed)[/dim]",
+                "  LLM_MODEL=ollama/llama3",
+                "  LLM_API_BASE=http://localhost:11434",
+            ]),
+            title=f"[bold]~/.flowback/.env[/bold]",
+            border_style="cyan",
+            padding=(1, 2),
+        )
+    )
+    console.print()
+
+
+@app.command()
 def graph() -> None:
     """Open the error graph in your browser — no server needed."""
     database.init_db()
