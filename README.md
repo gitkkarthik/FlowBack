@@ -1,4 +1,6 @@
 # FlowBack
+[![PyPI version](https://img.shields.io/pypi/v/flowback)](https://pypi.org/project/flowback)
+[![PyPI downloads](https://img.shields.io/pypi/dm/flowback)](https://pypi.org/project/flowback)
 
 > Pick up exactly where you left off.
 
